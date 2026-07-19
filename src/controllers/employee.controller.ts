@@ -155,6 +155,9 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
         updateData.reporting_manager_id = null;
     }
 
+    if (updateData.salary) updateData.salary = Number(updateData.salary);
+    if (updateData.joining_date) updateData.joining_date = new Date(updateData.joining_date);
+
     const updatedProfile = await prisma.employeeProfile.update({ where: { id: req.params.id }, data: updateData });
     if (password) await prisma.user.update({ where: { id: profile.user_id }, data: { password_hash: await hashPassword(password) } });
 
