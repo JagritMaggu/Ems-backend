@@ -5,6 +5,7 @@ import authRoutes from './routes/auth.routes';
 import employeeRoutes from './routes/employee.routes';
 import organizationRoutes from './routes/organization.routes';
 import dashboardRoutes from './routes/dashboard.routes';
+import path from 'path';
 
 dotenv.config();
 
@@ -13,6 +14,9 @@ const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+
+// Serve uploaded profile images statically
+app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
 
 // Routes
 app.use('/api/auth', authRoutes);

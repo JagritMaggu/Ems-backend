@@ -14,6 +14,11 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
+    let profile_image_url = undefined;
+    if (req.file) {
+      profile_image_url = `/uploads/${req.file.filename}`;
+    }
+
     const password_hash = await hashPassword(password);
 
     // Create both User and EmployeeProfile in a transaction
@@ -22,7 +27,7 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
         data: { email, password_hash, role }
       });
       const profile = await tx.employeeProfile.create({
-        data: { user_id: user.id, name, phone, department, designation, salary, joining_date: new Date(joining_date), reporting_manager_id }
+        data: { user_id: user.id, name, phone, department, designation, salary, joining_date: new Date(joining_date), reporting_manager_id, profile_image: profile_image_url }
       });
       return { user, profile };
     });
@@ -102,6 +107,10 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
     
     const profile = await prisma.employeeProfile.findUnique({ where: { id: req.params.id }, select: { user_id: true } });
     if (!profile) return;
+
+    if (req.file) {
+        updateData.profile_image = `/uploads/${req.file.filename}`;
+    }
 
     if (req.user?.role === 'EMPLOYEE' && req.user.employee_profile?.id === req.params.id) {
       const allowedUpdates = ['name', 'phone', 'profile_image'];
