@@ -1,0 +1,55 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+}
+
+enum Role {
+  SUPER_ADMIN
+  HR_MANAGER
+  EMPLOYEE
+}
+
+model User {
+  id                   String     @id @default(uuid())
+  email                String     @unique
+  password_hash        String
+  role                 Role       @default(EMPLOYEE)
+  status               String     @default("Active") // Active, Inactive
+  
+  employee_profile     EmployeeProfile?
+
+  created_at           DateTime   @default(now())
+  updated_at           DateTime   @updatedAt
+
+  @@index([email])
+}
+
+model EmployeeProfile {
+  id                   String     @id @default(uuid())
+  user_id              String     @unique
+  user                 User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  name                 String
+  phone                String?
+  department           String?
+  designation          String?
+  salary               Float?
+  joining_date         DateTime?
+  profile_image        String?
+
+  reporting_manager_id String?
+  reporting_manager    EmployeeProfile?  @relation("EmployeeToManager", fields: [reporting_manager_id], references: [id])
+  direct_reports       EmployeeProfile[] @relation("EmployeeToManager")
+
+  deleted_at           DateTime?
+
+  @@index([name])
+  @@index([department])
+  @@index([joining_date])
+}

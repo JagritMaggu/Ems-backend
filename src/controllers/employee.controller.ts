@@ -1,0 +1,181 @@
+import { Request, Response } from 'express';
+import prisma from '../config/prisma';
+import { hashPassword } from '../utils/hash';
+import { AuthRequest } from '../middlewares/authGuard';
+import { Prisma } from '@prisma/client';
+
+export const createEmployee = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { email, password, name, phone, department, designation, salary, joining_date, role, reporting_manager_id } = req.body;
+
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      res.status(400).json({ message: 'Email already exists' });
+      return;
+    }
+
+    const password_hash = await hashPassword(password);
+
+    // Create both User and EmployeeProfile in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: { email, password_hash, role }
+      });
+      const profile = await tx.employeeProfile.create({
+        data: { user_id: user.id, name, phone, department, designation, salary, joining_date: new Date(joining_date), reporting_manager_id }
+      });
+      return { user, profile };
+    });
+
+    res.status(201).json({ message: 'Employee created successfully', data: result.profile });
+  } catch (error) {
+    res.status(500).json({ message: 'Error creating employee' });
+  }
+};
+
+export const getEmployees = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { search, department, role, status, sortBy = 'created_at', sortOrder = 'desc', page = 1, limit = 10 } = req.query;
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const take = Number(limit);
+
+    const where: Prisma.EmployeeProfileWhereInput = { deleted_at: null };
+
+    if (search) {
+      where.OR = [
+        { name: { contains: String(search), mode: 'insensitive' } },
+        { user: { email: { contains: String(search), mode: 'insensitive' } } }
+      ];
+    }
+    if (department) where.department = String(department);
+    
+    // Additional filters on relation
+    if (role || status) {
+      where.user = {};
+      if (role) where.user.role = role as any;
+      if (status) where.user.status = String(status);
+    }
+
+    const [profiles, total] = await Promise.all([
+      prisma.employeeProfile.findMany({
+        where,
+        skip,
+        take,
+        // Sort by joining_date natively, or by user created_at
+        orderBy: sortBy === 'created_at' ? { user: { created_at: sortOrder as any } } : { [String(sortBy)]: sortOrder },
+        include: { user: { select: { email: true, role: true, status: true } } }
+      }),
+      prisma.employeeProfile.count({ where })
+    ]);
+
+    res.status(200).json({ data: profiles, meta: { total, page: Number(page), limit: take } });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching employees' });
+  }
+};
+
+export const getEmployeeById = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const profile = await prisma.employeeProfile.findUnique({
+      where: { id: req.params.id, deleted_at: null },
+      include: { 
+        user: { select: { email: true, role: true, status: true } },
+        reporting_manager: { select: { id: true, name: true } } 
+      }
+    });
+
+    if (!profile) {
+      res.status(404).json({ message: 'Employee not found' });
+      return;
+    }
+
+    res.status(200).json({ data: profile });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching employee' });
+  }
+};
+
+export const updateEmployee = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { password, ...updateData } = req.body;
+    
+    const profile = await prisma.employeeProfile.findUnique({ where: { id: req.params.id }, select: { user_id: true } });
+    if (!profile) return;
+
+    if (req.user?.role === 'EMPLOYEE' && req.user.employee_profile?.id === req.params.id) {
+      const allowedUpdates = ['name', 'phone', 'profile_image'];
+      const filteredData: any = {};
+      Object.keys(updateData).forEach((key) => {
+        if (allowedUpdates.includes(key)) filteredData[key] = updateData[key];
+      });
+      
+      const updatedProfile = await prisma.employeeProfile.update({ where: { id: req.params.id }, data: filteredData });
+      if (password) await prisma.user.update({ where: { id: profile.user_id }, data: { password_hash: await hashPassword(password) } });
+      
+      res.status(200).json({ message: 'Profile updated', data: updatedProfile });
+      return;
+    }
+
+    // Admin full update
+    const updatedProfile = await prisma.employeeProfile.update({ where: { id: req.params.id }, data: updateData });
+    if (password) await prisma.user.update({ where: { id: profile.user_id }, data: { password_hash: await hashPassword(password) } });
+
+    res.status(200).json({ message: 'Employee updated', data: updatedProfile });
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating employee' });
+  }
+};
+
+export const deleteEmployee = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const profile = await prisma.employeeProfile.findUnique({ where: { id: req.params.id }, select: { user_id: true } });
+    if (!profile) return;
+
+    await prisma.$transaction([
+      prisma.employeeProfile.update({ where: { id: req.params.id }, data: { deleted_at: new Date() } }),
+      prisma.user.update({ where: { id: profile.user_id }, data: { status: 'Inactive' } })
+    ]);
+
+    res.status(200).json({ message: 'Employee deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting employee' });
+  }
+};
+
+export const bulkCreateEmployees = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const employees = req.body;
+    if (!Array.isArray(employees) || employees.length === 0) {
+      res.status(400).json({ message: 'Invalid payload, expected array of employees' });
+      return;
+    }
+
+    const defaultPasswordHash = await hashPassword('password123');
+
+    await prisma.$transaction(async (tx) => {
+      for (const emp of employees) {
+        const user = await tx.user.create({
+          data: { email: emp.email, password_hash: defaultPasswordHash, role: emp.role || 'EMPLOYEE' }
+        });
+        await tx.employeeProfile.create({
+          data: {
+            user_id: user.id,
+            name: emp.name,
+            phone: emp.phone || null,
+            department: emp.department || null,
+            designation: emp.designation || null,
+            salary: emp.salary ? Number(emp.salary) : null,
+            joining_date: emp.joining_date ? new Date(emp.joining_date) : new Date()
+          }
+        });
+      }
+    });
+
+    res.status(201).json({ message: `${employees.length} employees created successfully` });
+  } catch (error) {
+    console.error('Bulk import error:', error);
+    res.status(500).json({ message: 'Error bulk importing employees' });
+  }
+};
+
