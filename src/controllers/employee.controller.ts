@@ -8,6 +8,11 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
   try {
     const { email, password, name, phone, department, designation, salary, joining_date, role, reporting_manager_id } = req.body;
 
+    if (!email || !password || !name) {
+      res.status(400).json({ message: 'Email, password, and name are required' });
+      return;
+    }
+
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       res.status(400).json({ message: 'Email already exists' });
@@ -43,8 +48,9 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
     });
 
     res.status(201).json({ message: 'Employee created successfully', data: result.profile });
-  } catch (error) {
-    res.status(500).json({ message: 'Error creating employee' });
+  } catch (error: any) {
+    console.error('CREATE ERROR:', error);
+    res.status(500).json({ message: 'Error creating employee', error: error.message || error.toString() });
   }
 };
 
@@ -117,14 +123,14 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
   try {
     const { password, ...updateData } = req.body;
     
-    const profile = await prisma.employeeProfile.findUnique({ where: { id: req.params.id }, select: { user_id: true } });
+    const profile = await prisma.employeeProfile.findUnique({ where: { id: req.params.id }, select: { user_id: true, user: { select: { role: true } } } });
     if (!profile) return;
 
     if (req.file) {
         updateData.profile_image = `/uploads/${req.file.filename}`;
     }
 
-    if (req.user?.role === 'EMPLOYEE' && req.user.employee_profile?.id === req.params.id) {
+    if (req.user?.role !== 'SUPER_ADMIN' && req.user?.employee_profile?.id === req.params.id) {
       const allowedUpdates = ['name', 'phone', 'profile_image'];
       const filteredData: any = {};
       Object.keys(updateData).forEach((key) => {
@@ -137,8 +143,13 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
       res.status(200).json({ message: 'Profile updated', data: updatedProfile });
       return;
     }
-
     // Admin full update - Validate Circular Reporting
+    // If user is HR_MANAGER, they cannot edit another HR_MANAGER or SUPER_ADMIN (but they can edit themselves)
+    if (req.user?.role === 'HR_MANAGER' && profile.user.role !== 'EMPLOYEE' && req.params.id !== req.user.employee_profile?.id) {
+      res.status(403).json({ message: 'HR Managers can only edit Employees or themselves' });
+      return;
+    }
+
     if (updateData.reporting_manager_id) {
       if (updateData.reporting_manager_id === req.params.id) {
         res.status(400).json({ message: 'Employee cannot report to themselves' });
@@ -172,8 +183,9 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
     if (password) await prisma.user.update({ where: { id: profile.user_id }, data: { password_hash: await hashPassword(password) } });
 
     res.status(200).json({ message: 'Employee updated', data: updatedProfile });
-  } catch (error) {
-    res.status(500).json({ message: 'Error updating employee' });
+  } catch (error: any) {
+    console.error('UPDATE ERROR:', error);
+    res.status(500).json({ message: 'Error updating employee', error: error.message || error.toString() });
   }
 };
 

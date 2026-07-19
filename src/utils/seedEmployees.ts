@@ -1,129 +1,94 @@
-import prisma from '../config/prisma';
+import { Role } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import prisma from '../config/prisma';
 
 async function main() {
-  console.log('Starting seed process...');
+  const password_hash = await bcrypt.hash('123456', 10);
+
+  // 1. HR Manager
+  const hrUser = await prisma.user.upsert({
+    where: { email: 'hr@ems.com' },
+    update: { password_hash },
+    create: { email: 'hr@ems.com', password_hash, role: Role.HR_MANAGER },
+  });
   
-  // Clean up existing seeded users (if any, excluding super admin)
-  await prisma.employeeProfile.deleteMany({
-    where: { user: { email: { not: 'admin@ems.com' } } }
-  });
-  await prisma.user.deleteMany({
-    where: { email: { not: 'admin@ems.com' } }
-  });
-
-  const passwordHash = await bcrypt.hash('password123', 10);
-
-  // 1. Create HR Manager
-  console.log('Creating HR Manager...');
-  const hrUser = await prisma.user.create({
-    data: {
-      email: 'sarah.hr@ems.com',
-      password_hash: passwordHash,
-      role: 'HR_MANAGER',
-      status: 'Active',
-      employee_profile: {
-        create: {
-          name: 'Sarah Connor',
-          phone: '5551234567',
-          department: 'Human Resources',
-          designation: 'HR Director',
-          salary: 95000,
-          joining_date: new Date('2023-01-15')
-        }
-      }
+  const hrProfile = await prisma.employeeProfile.upsert({
+    where: { user_id: hrUser.id },
+    update: { name: 'HR Manager', designation: 'HR Manager', salary: 100000 },
+    create: {
+      user_id: hrUser.id,
+      name: 'HR Manager',
+      designation: 'HR Manager',
+      department: 'HR',
+      salary: 100000,
+      joining_date: new Date(),
     },
-    include: { employee_profile: true }
   });
 
-  // 2. Create Engineering Manager
-  console.log('Creating Engineering Manager...');
-  const engManager = await prisma.user.create({
-    data: {
-      email: 'john.eng@ems.com',
-      password_hash: passwordHash,
-      role: 'EMPLOYEE',
-      status: 'Active',
-      employee_profile: {
-        create: {
-          name: 'John Smith',
-          phone: '5559876543',
-          department: 'Engineering',
-          designation: 'Engineering Manager',
-          salary: 120000,
-          joining_date: new Date('2022-06-01')
-        }
-      }
+  // 2. Manager
+  const managerUser = await prisma.user.upsert({
+    where: { email: 'manager@ems.com' },
+    update: { password_hash },
+    create: { email: 'manager@ems.com', password_hash, role: Role.EMPLOYEE },
+  });
+
+  const managerProfile = await prisma.employeeProfile.upsert({
+    where: { user_id: managerUser.id },
+    update: { name: 'Manager', reporting_manager_id: hrProfile.id, designation: 'Manager', salary: 80000 },
+    create: {
+      user_id: managerUser.id,
+      name: 'Manager',
+      designation: 'Manager',
+      department: 'Engineering',
+      salary: 80000,
+      joining_date: new Date(),
+      reporting_manager_id: hrProfile.id,
     },
-    include: { employee_profile: true }
   });
 
-  // 3. Create Senior Developer (Reports to Eng Manager)
-  console.log('Creating Senior Developer...');
-  const dev1 = await prisma.user.create({
-    data: {
-      email: 'alice.dev@ems.com',
-      password_hash: passwordHash,
-      role: 'EMPLOYEE',
-      status: 'Active',
-      employee_profile: {
-        create: {
-          name: 'Alice Johnson',
-          phone: '5551112222',
-          department: 'Engineering',
-          designation: 'Senior Frontend Developer',
-          salary: 90000,
-          joining_date: new Date('2024-02-10'),
-          reporting_manager_id: engManager.employee_profile!.id
-        }
-      }
-    }
+  // 3. Employee 1
+  const emp1User = await prisma.user.upsert({
+    where: { email: 'emp1@ems.com' },
+    update: { password_hash },
+    create: { email: 'emp1@ems.com', password_hash, role: Role.EMPLOYEE },
   });
 
-  // 4. Create Junior Developer (Reports to Eng Manager)
-  console.log('Creating Junior Developer...');
-  const dev2 = await prisma.user.create({
-    data: {
-      email: 'bob.dev@ems.com',
-      password_hash: passwordHash,
-      role: 'EMPLOYEE',
-      status: 'Active',
-      employee_profile: {
-        create: {
-          name: 'Bob Williams',
-          phone: '5553334444',
-          department: 'Engineering',
-          designation: 'Junior Backend Developer',
-          salary: 65000,
-          joining_date: new Date('2025-05-20'),
-          reporting_manager_id: engManager.employee_profile!.id
-        }
-      }
-    }
+  await prisma.employeeProfile.upsert({
+    where: { user_id: emp1User.id },
+    update: { name: 'Employee 1', reporting_manager_id: managerProfile.id, designation: 'Software Engineer', salary: 60000 },
+    create: {
+      user_id: emp1User.id,
+      name: 'Employee 1',
+      designation: 'Software Engineer',
+      department: 'Engineering',
+      salary: 60000,
+      joining_date: new Date(),
+      reporting_manager_id: managerProfile.id,
+    },
   });
 
-  // 5. Create Marketing Specialist
-  console.log('Creating Marketing Specialist...');
-  const mktg = await prisma.user.create({
-    data: {
-      email: 'emma.mktg@ems.com',
-      password_hash: passwordHash,
-      role: 'EMPLOYEE',
-      status: 'Inactive',
-      employee_profile: {
-        create: {
-          name: 'Emma Davis',
-          phone: '5559998888',
-          department: 'Marketing',
-          designation: 'SEO Specialist',
-          salary: 75000,
-          joining_date: new Date('2023-11-05')
-        }
-      }
-    }
+  // 4. Employee 2
+  const emp2User = await prisma.user.upsert({
+    where: { email: 'emp2@ems.com' },
+    update: { password_hash },
+    create: { email: 'emp2@ems.com', password_hash, role: Role.EMPLOYEE },
   });
 
-  console.log('Seeding completed successfully!');
+  await prisma.employeeProfile.upsert({
+    where: { user_id: emp2User.id },
+    update: { name: 'Employee 2', reporting_manager_id: managerProfile.id, designation: 'QA Engineer', salary: 55000 },
+    create: {
+      user_id: emp2User.id,
+      name: 'Employee 2',
+      designation: 'QA Engineer',
+      department: 'Engineering',
+      salary: 55000,
+      joining_date: new Date(),
+      reporting_manager_id: managerProfile.id,
+    },
+  });
+
+  console.log('Successfully seeded HR Manager -> Manager -> Employee 1 & 2');
 }
 
 main()
