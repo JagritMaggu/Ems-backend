@@ -33,7 +33,7 @@ export const getOrganizationTree = async (req: AuthRequest, res: Response): Prom
 export const getReporters = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const reporters = await prisma.employeeProfile.findMany({
-      where: { reporting_manager_id: req.params.id, deleted_at: null },
+      where: { reporting_manager_id: req.params.id as string, deleted_at: null },
       select: { id: true, name: true, designation: true, profile_image: true }
     });
     res.status(200).json({ data: reporters });
@@ -66,7 +66,7 @@ export const assignManager = async (req: AuthRequest, res: Response): Promise<vo
     }
 
     const updated = await prisma.employeeProfile.update({
-      where: { id: employeeId },
+      where: { id: employeeId as string },
       data: { reporting_manager_id }
     });
 

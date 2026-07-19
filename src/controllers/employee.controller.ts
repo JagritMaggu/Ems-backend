@@ -101,7 +101,7 @@ export const getEmployees = async (req: AuthRequest, res: Response): Promise<voi
 export const getEmployeeById = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const profile = await prisma.employeeProfile.findUnique({
-      where: { id: req.params.id, deleted_at: null },
+      where: { id: req.params.id as string, deleted_at: null },
       include: { 
         user: { select: { email: true, role: true, status: true } },
         reporting_manager: { select: { id: true, name: true } } 
@@ -123,7 +123,7 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
   try {
     const { password, ...updateData } = req.body;
     
-    const profile = await prisma.employeeProfile.findUnique({ where: { id: req.params.id }, select: { user_id: true, user: { select: { role: true } } } });
+    const profile = await prisma.employeeProfile.findUnique({ where: { id: req.params.id as string }, select: { user_id: true, user: { select: { role: true } } } });
     if (!profile) return;
 
     if (req.file) {
@@ -137,7 +137,7 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
         if (allowedUpdates.includes(key)) filteredData[key] = updateData[key];
       });
       
-      const updatedProfile = await prisma.employeeProfile.update({ where: { id: req.params.id }, data: filteredData });
+      const updatedProfile = await prisma.employeeProfile.update({ where: { id: req.params.id as string }, data: filteredData });
       if (password) await prisma.user.update({ where: { id: profile.user_id }, data: { password_hash: await hashPassword(password) } });
       
       res.status(200).json({ message: 'Profile updated', data: updatedProfile });
@@ -145,7 +145,7 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
     }
     // Admin full update - Validate Circular Reporting
     // If user is HR_MANAGER, they cannot edit another HR_MANAGER or SUPER_ADMIN (but they can edit themselves)
-    if (req.user?.role === 'HR_MANAGER' && profile.user.role !== 'EMPLOYEE' && req.params.id !== req.user.employee_profile?.id) {
+    if (req.user?.role === 'HR_MANAGER' && (profile as any).user.role !== 'EMPLOYEE' && req.params.id !== req.user.employee_profile?.id) {
       res.status(403).json({ message: 'HR Managers can only edit Employees or themselves' });
       return;
     }
@@ -179,7 +179,7 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
     if (updateData.salary) updateData.salary = Number(updateData.salary);
     if (updateData.joining_date) updateData.joining_date = new Date(updateData.joining_date);
 
-    const updatedProfile = await prisma.employeeProfile.update({ where: { id: req.params.id }, data: updateData });
+    const updatedProfile = await prisma.employeeProfile.update({ where: { id: req.params.id as string }, data: updateData });
     if (password) await prisma.user.update({ where: { id: profile.user_id }, data: { password_hash: await hashPassword(password) } });
 
     res.status(200).json({ message: 'Employee updated', data: updatedProfile });
@@ -191,11 +191,11 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
 
 export const deleteEmployee = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const profile = await prisma.employeeProfile.findUnique({ where: { id: req.params.id }, select: { user_id: true } });
+    const profile = await prisma.employeeProfile.findUnique({ where: { id: req.params.id as string }, select: { user_id: true } });
     if (!profile) return;
 
     await prisma.$transaction([
-      prisma.employeeProfile.update({ where: { id: req.params.id }, data: { deleted_at: new Date() } }),
+      prisma.employeeProfile.update({ where: { id: req.params.id as string }, data: { deleted_at: new Date() } }),
       prisma.user.update({ where: { id: profile.user_id }, data: { status: 'Inactive' } })
     ]);
 
