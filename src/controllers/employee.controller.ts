@@ -27,7 +27,17 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
         data: { email, password_hash, role }
       });
       const profile = await tx.employeeProfile.create({
-        data: { user_id: user.id, name, phone, department, designation, salary, joining_date: new Date(joining_date), reporting_manager_id, profile_image: profile_image_url }
+        data: { 
+          user_id: user.id, 
+          name, 
+          phone, 
+          department, 
+          designation, 
+          salary: salary ? Number(salary) : null, 
+          joining_date: joining_date ? new Date(joining_date) : null, 
+          reporting_manager_id: reporting_manager_id === "" ? null : reporting_manager_id, 
+          profile_image: profile_image_url 
+        }
       });
       return { user, profile };
     });
