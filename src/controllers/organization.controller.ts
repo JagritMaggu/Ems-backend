@@ -5,7 +5,10 @@ import { AuthRequest } from '../middlewares/authGuard';
 export const getOrganizationTree = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const profiles = await prisma.employeeProfile.findMany({
-      where: { deleted_at: null },
+      where: { 
+        deleted_at: null,
+        user: { role: { not: 'SUPER_ADMIN' } }
+      },
       select: { id: true, name: true, designation: true, profile_image: true, reporting_manager_id: true }
     });
 

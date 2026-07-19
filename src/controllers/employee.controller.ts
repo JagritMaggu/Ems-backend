@@ -45,7 +45,10 @@ export const getEmployees = async (req: AuthRequest, res: Response): Promise<voi
     const skip = (Number(page) - 1) * Number(limit);
     const take = Number(limit);
 
-    const where: Prisma.EmployeeProfileWhereInput = { deleted_at: null };
+    const where: Prisma.EmployeeProfileWhereInput = { 
+      deleted_at: null,
+      user: { role: { not: 'SUPER_ADMIN' } }
+    };
 
     if (search) {
       where.OR = [
@@ -57,9 +60,8 @@ export const getEmployees = async (req: AuthRequest, res: Response): Promise<voi
     
     // Additional filters on relation
     if (role || status) {
-      where.user = {};
-      if (role) where.user.role = role as any;
-      if (status) where.user.status = String(status);
+      if (role) (where.user as any).role = role;
+      if (status) (where.user as any).status = String(status);
     }
 
     const [profiles, total] = await Promise.all([
