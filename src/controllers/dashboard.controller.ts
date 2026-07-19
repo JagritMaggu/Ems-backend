@@ -5,9 +5,9 @@ import { AuthRequest } from '../middlewares/authGuard';
 export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const [totalUsers, activeUsers, inactiveUsers, departmentGroups] = await Promise.all([
-      prisma.user.count(),
-      prisma.user.count({ where: { status: 'Active' } }),
-      prisma.user.count({ where: { status: 'Inactive' } }),
+      prisma.user.count({ where: { employee_profile: { deleted_at: null } } }),
+      prisma.user.count({ where: { status: 'Active', employee_profile: { deleted_at: null } } }),
+      prisma.user.count({ where: { status: 'Inactive', employee_profile: { deleted_at: null } } }),
       prisma.employeeProfile.groupBy({
         by: ['department'],
         where: { deleted_at: null, department: { not: null } },
