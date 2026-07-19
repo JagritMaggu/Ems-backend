@@ -126,7 +126,33 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // Admin full update
+    // Admin full update - Validate Circular Reporting
+    if (updateData.reporting_manager_id) {
+      if (updateData.reporting_manager_id === req.params.id) {
+        res.status(400).json({ message: 'Employee cannot report to themselves' });
+        return;
+      }
+      
+      let currentManagerId = updateData.reporting_manager_id;
+      const visited = new Set<string>();
+      
+      while (currentManagerId) {
+        if (currentManagerId === req.params.id || visited.has(currentManagerId)) {
+          res.status(400).json({ message: 'Circular reporting detected. Cannot assign this manager.' });
+          return;
+        }
+        visited.add(currentManagerId);
+        
+        const managerProfile = await prisma.employeeProfile.findUnique({
+          where: { id: currentManagerId },
+          select: { reporting_manager_id: true }
+        });
+        currentManagerId = managerProfile?.reporting_manager_id;
+      }
+    } else if (updateData.reporting_manager_id === "") {
+        updateData.reporting_manager_id = null;
+    }
+
     const updatedProfile = await prisma.employeeProfile.update({ where: { id: req.params.id }, data: updateData });
     if (password) await prisma.user.update({ where: { id: profile.user_id }, data: { password_hash: await hashPassword(password) } });
 
