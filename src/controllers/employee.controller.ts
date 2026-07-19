@@ -179,8 +179,19 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
     if (updateData.salary) updateData.salary = Number(updateData.salary);
     if (updateData.joining_date) updateData.joining_date = new Date(updateData.joining_date);
 
-    const updatedProfile = await prisma.employeeProfile.update({ where: { id: req.params.id as string }, data: updateData });
-    if (password) await prisma.user.update({ where: { id: profile.user_id }, data: { password_hash: await hashPassword(password) } });
+    const { status, role, ...profileUpdateData } = updateData;
+
+    const updatedProfile = await prisma.employeeProfile.update({ where: { id: req.params.id as string }, data: profileUpdateData });
+    
+    // Update User specific fields
+    const userUpdate: any = {};
+    if (password) userUpdate.password_hash = await hashPassword(password);
+    if (status) userUpdate.status = status;
+    if (role) userUpdate.role = role;
+    
+    if (Object.keys(userUpdate).length > 0) {
+      await prisma.user.update({ where: { id: profile.user_id }, data: userUpdate });
+    }
 
     res.status(200).json({ message: 'Employee updated', data: updatedProfile });
   } catch (error: any) {
